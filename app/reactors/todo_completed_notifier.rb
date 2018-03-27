@@ -3,6 +3,10 @@ module EventSourceryTodoApp
     class TodoCompletedNotifier < Eventory::Reactor
       # include EventSourcery::Postgres::Reactor
 
+      def namespace
+        nil
+      end
+
       SendEmail = ->(params) do
         puts <<~EMAIL
           -- Email Sent
@@ -28,25 +32,25 @@ module EventSourceryTodoApp
       # emitting events, and/or calling external systems.
 
       on TodoAdded do |event|
-        table.insert(
-          todo_id: event.aggregate_id,
-          title: event.body['title'],
-          stakeholder_email: event.body['stakeholder_email'],
+        table(:reactor_todo_completed_notifier).insert(
+          todo_id: event.stream_id,
+          title: event.data.body[:title],
+          stakeholder_email: event.data.body[:stakeholder_email],
         )
       end
 
       on TodoAmended do |event|
-        table.where(todo_id: event.aggregate_id).update(
-          event.body.slice('title', 'stakeholder_email'),
+        table(:reactor_todo_completed_notifier).where(todo_id: event.stream_id).update(
+          event.data.body.slice(:title, :stakeholder_email),
         )
       end
 
       on TodoAbandoned do |event|
-        table.where(todo_id: event.aggregate_id).delete
+        table(:reactor_todo_completed_notifier).where(todo_id: event.stream_id).delete
       end
 
       on TodoCompleted do |event|
-        todo = table.where(todo_id: event.aggregate_id).first
+        todo = table(:reactor_todo_completed_notifier).where(todo_id: event.stream_id).first
 
         # Here we send an email to the stakeholder and record that fact using
         # an event in the store.
@@ -56,15 +60,16 @@ module EventSourceryTodoApp
             message: "Your todo item #{todo[:title]} has been completed!",
           )
 
-          emit_event(
+          append_event(
+            event.stream_id,
             StakeholderNotifiedOfTodoCompletion.new(
-              aggregate_id: event.aggregate_id,
+              stream_id: event.stream_id,
               body: { notified_on: DateTime.now.new_offset(0) }
             )
           )
         end
 
-        table.where(todo_id: event.aggregate_id).delete
+        table(:reactor_todo_completed_notifier).where(todo_id: event.stream_id).delete
       end
     end
   end

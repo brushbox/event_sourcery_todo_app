@@ -1,1 +1,4 @@
-StakeholderNotifiedOfTodoCompletion = Class.new(Eventory::Event)
+class StakeholderNotifiedOfTodoCompletion < Eventory::Event
+  attribute :stream_id
+  attribute :body
+end

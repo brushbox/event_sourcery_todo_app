@@ -61,7 +61,7 @@ RSpec.describe 'scheduled todos', type: :request do
       events.each_with_index.map do |event, i|
         Eventory::RecordedEvent.new(
           number: i,
-          id: i,
+          id: SecureRandom.uuid,
           stream_id: event.stream_id,
           stream_version: i,
           type: event.class,

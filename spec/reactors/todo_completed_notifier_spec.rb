@@ -12,7 +12,24 @@ RSpec.describe EventSourceryTodoApp::Reactors::TodoCompletedNotifier do
   end
 
   describe '#process' do
-    subject(:process) { stream.each { |event| reactor.process(event) } }
+    subject(:process) { recorded_stream.each { |event| reactor.process(event) } }
+
+    let(:recorded_stream) do
+      stream.each_with_index.map do |event, i|
+        Eventory::RecordedEvent.new(
+          number: i,
+          id: SecureRandom.uuid,
+          stream_id: event.stream_id,
+          stream_version: i,
+          type: event.class,
+          data: event,
+          recorded_at: Time.now,
+          correlation_id: SecureRandom.uuid,
+          causation_id: SecureRandom.uuid,
+          metadata: nil
+        )
+      end
+    end
 
     let(:todo_id) { SecureRandom.uuid }
     let(:current_date) { DateTime.parse('2017-06-13 00:00:00 +10:00') }
@@ -28,7 +45,7 @@ RSpec.describe EventSourceryTodoApp::Reactors::TodoCompletedNotifier do
     context 'when a todo is added' do
       let(:stream) do
         [
-          TodoAdded.new(aggregate_id: todo_id, body: {
+          TodoAdded.new(stream_id: todo_id, body: {
             title: 'You are terminated!',
             stakeholder_email: 'the-governator@example.com',
           }),
@@ -48,11 +65,11 @@ RSpec.describe EventSourceryTodoApp::Reactors::TodoCompletedNotifier do
     context 'when a todo is amended' do
       let(:stream) do
         [
-          TodoAdded.new(aggregate_id: todo_id, body: {
+          TodoAdded.new(stream_id: todo_id, body: {
             title: 'You are terminated!',
             stakeholder_email: 'the-governator@example.com',
           }),
-          TodoAmended.new(aggregate_id: todo_id, body: {
+          TodoAmended.new(stream_id: todo_id, body: {
             stakeholder_email: 'the-governator@example.gov',
           }),
         ]
@@ -71,11 +88,11 @@ RSpec.describe EventSourceryTodoApp::Reactors::TodoCompletedNotifier do
     context 'when a todo is abandoned' do
       let(:stream) do
         [
-          TodoAdded.new(aggregate_id: todo_id, body: {
+          TodoAdded.new(stream_id: todo_id, body: {
             title: 'You are terminated!',
             stakeholder_email: 'the-governator@example.com',
           }),
-          TodoAbandoned.new(aggregate_id: todo_id),
+          TodoAbandoned.new(stream_id: todo_id),
         ]
       end
 
@@ -89,11 +106,11 @@ RSpec.describe EventSourceryTodoApp::Reactors::TodoCompletedNotifier do
       context 'when the todo has a stakeholder' do
         let(:stream) {
           [
-            TodoAdded.new(aggregate_id: todo_id, body: {
+            TodoAdded.new(stream_id: todo_id, body: {
               title: 'You are terminated!',
               stakeholder_email: 'the-governator@example.com',
             }),
-            TodoCompleted.new(aggregate_id: todo_id),
+            TodoCompleted.new(stream_id: todo_id),
           ]
         }
 
@@ -105,10 +122,10 @@ RSpec.describe EventSourceryTodoApp::Reactors::TodoCompletedNotifier do
         end
 
         it 'emits a StakeholderNotifiedOfTodoCompletion event' do
-          emitted_event = EventSourceryTodoApp.event_source.get_next_from(1).first
+          emitted_event = EventSourceryTodoApp.event_store.read_all_events_from(1).first
 
-          expect(emitted_event).to be_a(StakeholderNotifiedOfTodoCompletion)
-          expect(emitted_event.body.to_h).to include('notified_on' => '2017-06-12T14:00:00+00:00')
+          expect(emitted_event.data).to be_a(StakeholderNotifiedOfTodoCompletion)
+          expect(emitted_event.data.body.to_h).to include('notified_on' => '2017-06-12T14:00:00+00:00')
         end
 
         it 'deletes the row from the reactor table' do
@@ -120,10 +137,10 @@ RSpec.describe EventSourceryTodoApp::Reactors::TodoCompletedNotifier do
       context 'when the todo does not have a stakeholder' do
         let(:stream) {
           [
-            TodoAdded.new(aggregate_id: todo_id, body: {
+            TodoAdded.new(stream_id: todo_id, body: {
               title: 'You are terminated!',
             }),
-            TodoCompleted.new(aggregate_id: todo_id),
+            TodoCompleted.new(stream_id: todo_id),
           ]
         }
 
@@ -132,7 +149,7 @@ RSpec.describe EventSourceryTodoApp::Reactors::TodoCompletedNotifier do
         end
 
         it 'does not emit a StakeholderNotifiedOfTodoCompletion event' do
-          emitted_event = EventSourceryTodoApp.event_source.get_next_from(1).first
+          emitted_event = EventSourceryTodoApp.event_store.read_all_events_from(1, limit: 1).first
           expect(emitted_event).to_not be_a(StakeholderNotifiedOfTodoCompletion)
         end
 
