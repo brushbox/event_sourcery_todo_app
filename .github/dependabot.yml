@@ -1,0 +1,16 @@
+version: 2
+updates:
+- package-ecosystem: bundler
+  directory: "/"
+  schedule:
+    interval: daily
+    time: "19:00"
+  open-pull-requests-limit: 10
+  ignore:
+  - dependency-name: database_cleaner
+    versions:
+    - 1.8.5
+    - 2.0.0
+  - dependency-name: commander
+    versions:
+    - 4.5.2
